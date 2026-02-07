@@ -22,10 +22,9 @@ app.use(
 );
 
 // Test Route
-app.get("/navin", (req, res) => {
-  res.send("Navin route working");
+app.get("/", (req, res) => {
+  res.send("Welcome to Node 🚀");
 });
-
 
 // Main API route
 app.use("/api/schools", schoolRoutes);
