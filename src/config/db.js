@@ -30,6 +30,7 @@ const db = async () => {
     console.log("URL =>", url);
 
     await mongoose.connect(url);
+    
 
     console.log("Db is connected");
   } catch (error) {
