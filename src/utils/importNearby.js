@@ -1,9 +1,13 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import xlsx from "xlsx";
 import NearbySchool from "../models/nearby.model.js";
 import db from "../config/db.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+
 
 // current file path
 const __filename = fileURLToPath(import.meta.url);
