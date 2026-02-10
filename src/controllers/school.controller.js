@@ -1,63 +1,41 @@
-// import School from "../models/school.model.js";
-// import NearbySchool from "../models/nearby.model.js";
-
-// export const getSchoolWithNearby = async (req, res) => {
-//   try {
-//     const { udise } = req.params;
-
-//     // main school
-//     const school = await School.findOne({ udise_code: udise });
-
-//     if (!school) {
-//       return res.status(404).json({ message: "School not found" });
-//     }
-
-//     // mappings
-//     const mappings = await NearbySchool.find({ udise_code: udise });
-
-//     // fetch details
-//     const nearby = await Promise.all(
-//       mappings.map(async (m) => {
-//         const nearSchool = await School.findOne({
-//           udise_code: m.nearby_udise_code,
-//         });
-
-//         if (!nearSchool) return null;
-
-//         return {
-//           udise_code: nearSchool.udise_code,
-//           school_name: nearSchool.school_name,
-//           mobile: nearSchool.mobile,
-//           pincode: nearSchool.pincode,
-//           location_url: nearSchool.location_url,
-//           distance_km: m.distance_km,
-//           preferred: m.preferred,
-//         };
-//       })
-//     );
-
-//     res.json({
-//       school,
-//       nearby: nearby.filter(Boolean),
-//     });
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
-
-
-
-
-
 import School from "../models/school.model.js";
 import Nearby from "../models/nearby.model.js";
 
-export const searchSchool = async (req, res) => {
+
+// 🎯 1. Get Districts
+export const getDistricts = async (req, res) => {
+  try {
+    const districts = await School.distinct("district");
+    res.json(districts.sort());
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+};
+
+
+// 🎯 2. Get Schools by District
+export const getSchoolsByDistrict = async (req, res) => {
+  try {
+    const { district } = req.params;
+
+    const schools = await School.find({ district }).select(
+      " school_name udise_code district pincode map_link map_link"
+    );
+
+    res.json(schools);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+};
+
+
+// 🎯 3. Get Single School + Nearby
+export const getSchoolWithNearby = async (req, res) => {
   try {
     const { udise } = req.params;
 
     const school = await School.findOne({ udise_code: udise });
-    if (!school) return res.status(404).json({ message: "Not found" });
+    if (!school) return res.status(404).json({ message: "School not found" });
 
     const mappings = await Nearby.find({ udise_code: udise });
 
@@ -81,19 +59,28 @@ export const searchSchool = async (req, res) => {
       })
     );
 
-    res.json({ school, nearby: nearby.filter(Boolean) });
+    res.json({
+      school,
+      nearby: nearby.filter(Boolean),
+    });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
 };
 
+
+// 🎯 4. Mark Preferred
 export const markPreferred = async (req, res) => {
-  const { udise, nearby } = req.body;
+  try {
+    const { udise, nearby } = req.body;
 
-  await Nearby.findOneAndUpdate(
-    { udise_code: udise, nearby_udise_code: nearby },
-    { preferred: "yes" }
-  );
+    await Nearby.findOneAndUpdate(
+      { udise_code: udise, nearby_udise_code: nearby },
+      { preferred: "yes" }
+    );
 
-  res.json({ message: "Updated" });
+    res.json({ message: "Preferred updated" });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
 };
