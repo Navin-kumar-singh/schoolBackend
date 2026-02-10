@@ -89,6 +89,7 @@ const clean = (v) => v?.toString().trim() || "";
 const run = async () => {
   try {
     await db();
+    
 
     const srcFolder = path.join(__dirname, "../");
 
