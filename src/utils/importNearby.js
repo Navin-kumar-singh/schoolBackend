@@ -29,6 +29,8 @@ const run = async () => {
   try {
     await db();
 
+    
+
     const srcFolder = path.join(__dirname, "../");
 
     console.log("📂 Looking inside:", srcFolder);
