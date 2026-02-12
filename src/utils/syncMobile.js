@@ -11,15 +11,31 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const BATCH_SIZE = 1000;
+
 const clean = (v) => v?.toString().trim() || "";
 
-// remove header spaces
 const normalizeKey = (obj) => {
-  const n = {};
+  const normalized = {};
   Object.keys(obj).forEach((k) => {
-    n[k.trim()] = obj[k];
+    const key = k.trim();
+    normalized[key] = obj[k];
+    normalized[key.toLowerCase()] = obj[k];
   });
-  return n;
+  return normalized;
+};
+
+const EXPECTED_COLUMNS = {
+  udise: ["nearby_udise_code", "nearby udise code", "udise_code", "udise"],
+  mobile: ["nearby_school_mobile", "nearby school mobile", "mobile", "phone"],
+};
+
+const findColumn = (row, possibleNames) => {
+  for (const name of possibleNames) {
+    if (row[name] !== undefined) return row[name];
+    if (row[name.toLowerCase()] !== undefined) return row[name.toLowerCase()];
+  }
+  return null;
 };
 
 const run = async () => {
@@ -27,15 +43,13 @@ const run = async () => {
     await db();
 
     const srcFolder = path.join(__dirname, "../");
-
     const files = fs.readdirSync(srcFolder);
-
     const excelFile = files.find(
       (f) => f.toLowerCase().includes("nearby") && f.endsWith(".xlsx")
     );
 
     if (!excelFile) {
-      console.log("❌ Nearby file not found");
+      console.log("❌ Nearby Excel file not found");
       process.exit(1);
     }
 
@@ -46,34 +60,67 @@ const run = async () => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = xlsx.utils.sheet_to_json(sheet);
 
+    console.log("📊 Total rows in Excel:", rawRows.length);
+
     const rows = rawRows.map((r) => normalizeKey(r));
 
-    let updated = 0;
-    let notFound = 0;
+    const bulkOps = [];
+    let validCount = 0;
+    let skippedNoMobile = 0;
+    let skippedNoUdise = 0;
 
-    for (const r of rows) {
-      const udise = clean(r["nearby_udise_code"]);
-      const mobile = clean(r["nearby_school_mobile"]);
+    for (const [index, row] of rows.entries()) {
+      const udise = clean(findColumn(row, EXPECTED_COLUMNS.udise));
+      const mobile = clean(findColumn(row, EXPECTED_COLUMNS.mobile));
 
-      if (!udise || !mobile) continue;
+      if (!udise) {
+        skippedNoUdise++;
+        continue;
+      }
+      if (!mobile) {
+        skippedNoMobile++;
+        continue;
+      }
 
-      const result = await School.updateOne(
-        { udise_code: udise },
-        { $set: { mobile } }
-      );
+      bulkOps.push({
+        updateOne: {
+          filter: { udise_code: udise },
+          update: { $set: { mobile } },
+        },
+      });
 
-      if (result.matchedCount === 0) notFound++;
-      else updated++;
+      validCount++;
+
+      if (bulkOps.length >= BATCH_SIZE) {
+        const result = await School.bulkWrite(bulkOps, { ordered: false });
+        console.log(
+          `✅ Batch: matched ${result.matchedCount}, modified ${result.modifiedCount} – progress ${index + 1}/${rows.length}`
+        );
+        bulkOps.length = 0;
+      }
     }
 
-    console.log("✅ Mobile updated:", updated);
-    console.log("❌ Not found in master:", notFound);
+    if (bulkOps.length > 0) {
+      const result = await School.bulkWrite(bulkOps, { ordered: false });
+      console.log(
+        `✅ Final batch: matched ${result.matchedCount}, modified ${result.modifiedCount}`
+      );
+    }
 
-    console.log("🎉 Sync finished");
-    process.exit();
+    console.log("\n🎯 Sync Summary:");
+    console.log(`   📱 Valid mobile+UDISE pairs : ${validCount}`);
+    console.log(`   🚫 Skipped (missing UDISE)  : ${skippedNoUdise}`);
+    console.log(`   📵 Skipped (empty mobile)   : ${skippedNoMobile}`);
+
+    const withMobile = await School.countDocuments({ mobile: { $ne: "" } });
+    const total = await School.countDocuments();
+    console.log(`📊 Schools with mobile: ${withMobile} / ${total}`);
+    console.log("\n🎉 Mobile sync completed!");
+
+    process.exit(0);
   } catch (error) {
-    console.log("❌ Error:", error.message);
-    process.exit();
+    console.error("❌ Fatal error:", error);
+    process.exit(1);
   }
 };
 
