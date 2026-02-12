@@ -11,6 +11,7 @@ const schoolSchema = new mongoose.Schema(
     map_link: String,
     location_url: String,
     mobile: String,
+    visited: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
